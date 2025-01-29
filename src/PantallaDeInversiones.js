@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, {useMemo, useState} from 'react';
 import InvestmentResults from './InvestmentResults';
 import DisclaimerOverlay from './DisclamerOverlay';
 import axios from 'axios';
@@ -29,7 +29,7 @@ const PantallaDeInversiones = () => {
     "DIA", "MES", "TRIMESTRE", "SEMESTRE", "YEAR", "TOW YEARS"
   ];
 
-  const API_URL = "http://localhost:8000/inversion";  // Esta es la URL correcta
+  const API_URL = "http://localhost:8000/inversion"; // Asegúrate de que sea la URL correcta
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -38,75 +38,59 @@ const PantallaDeInversiones = () => {
     setLoading(true);
     setError(null);
   
-    const requestData = {
-      monto_a_invertir: Number(investmentAmount),
-      fija_o_flexible: investmentType,
-      modelo_de_inversion: selectedPeriod,
-    };
-  
-    console.log('Enviando petición a:', API_URL);
-    console.log('Datos enviados:', requestData);
-  
     try {
-      const response = await axios.post(API_URL, requestData, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      const response = await axios.post(API_URL, {
+        monto_a_invertir: Number(investmentAmount),
+        fija_o_flexible: investmentType,
+        modelo_de_inversion: selectedPeriod,
       });
   
-      console.log("Respuesta completa:", response);
+      console.log("Datos recibidos:", response.data); // 🔍 Ver JSON en consola
+
       setInvestmentData(response.data);
     } catch (error) {
-      console.error("Error completo:", error);
-      
       if (error.response) {
-        setError(`Error ${error.response.status}: ${JSON.stringify(error.response.data)}`);
+        // El servidor respondió con un estado fuera del rango 2xx
+        console.error("Error en la API:", error.response.status, error.response.data);
+        setError(`Error ${error.response.status}: ${error.response.data}`);
       } else if (error.request) {
-        setError("No se pudo conectar con el servidor. Verifica que la API esté corriendo en http://localhost:8000");
+        // La solicitud fue hecha pero no hubo respuesta
+        console.error("No hay respuesta del servidor:", error.request);
+        setError("No hay respuesta del servidor. Verifica la API.");
       } else {
-        setError(`Error al procesar la solicitud: ${error.message}`);
+        // Error en la configuración de la solicitud
+        console.error("Error desconocido:", error.message);
+        setError("Error al procesar la solicitud.");
       }
     } finally {
       setLoading(false);
     }
   };
-
-  const handleResults = (e) => {
-    e.preventDefault();
-    if (Number(investmentAmount) >= 50) {
-      setShowResults(true);
-    }
-    if(Number(investmentAmount) > threshold)
-        {
-            setShowRecomendatios(true);
-        }
-  };
-
-  const generateBarChartData = () => ({
-    labels: investmentData?.inversiones.map(inv => inv.nombre) || [],
+  const generateBarChartData = useMemo(() => ({
+    labels: investmentData?.inversiones?.map(inv => inv.nombre) || [],
     datasets: [
       {
-        label: 'Rendimiento Total ($)',
-        data: investmentData?.inversiones.map(inv => inv.rendimiento) || [],
+        label: 'Monto Asignado ($)',
+        data: investmentData?.inversiones?.map(inv => inv.montoAsignado + inv.rendimiento) || [],
         backgroundColor: ['rgba(24, 85, 152, 0.67)', 'rgba(255, 99, 132, 0.6)', 'rgba(54, 162, 235, 0.6)'],
         borderColor: ['rgb(75, 91, 192)', 'rgb(255, 99, 132)', 'rgb(54, 162, 235)'],
         borderWidth: 1,
       }
     ]
-  });
+  }), [investmentData]);
 
-  const generatePieChartData = () => ({
-    labels: investmentData?.inversiones.map(inv => inv.nombre) || [],
+  const generatePieChartData = useMemo(() => ({
+    labels: investmentData?.inversiones?.map(inv => inv.nombre) || [],
     datasets: [
       {
         label: 'Distribución de Inversión',
-        data: investmentData?.inversiones.map(inv => inv.montoAsignado) || [],
+        data: investmentData?.inversiones?.map(inv => inv.montoAsignado) || [],
         backgroundColor: ['rgba(24, 85, 152, 0.67)', 'rgba(255, 99, 132, 0.6)', 'rgba(54, 162, 235, 0.6)'],
         borderColor: '#ffffff',
         borderWidth: 2,
       }
     ]
-  });
+  }), [investmentData]);
 
   const containerStyle = {
     maxWidth: '1200px',
@@ -252,8 +236,8 @@ const PantallaDeInversiones = () => {
             <label style={radioLabelStyle}>
               <input
                 type="radio"
-                checked={investmentType === "Fijas"}
-                onChange={() => setInvestmentType("Fijas")}
+                checked={investmentType === "Fija"}
+                onChange={() => setInvestmentType("Fija")}
                 style={{ marginRight: '0.5rem' }}
               />
               Fija
@@ -261,8 +245,8 @@ const PantallaDeInversiones = () => {
             <label style={radioLabelStyle}>
               <input
                 type="radio"
-                checked={investmentType === "Flexibles"}
-                onChange={() => setInvestmentType("Flexibles")}
+                checked={investmentType === "Flexible"}
+                onChange={() => setInvestmentType("Flexible")}
                 style={{ marginRight: '0.5rem' }}
               />
               Flexible
@@ -280,11 +264,11 @@ const PantallaDeInversiones = () => {
         {error && <p style={{ color: "red" }}>❌ {error}</p>}
       </form>
 
-{investmentData&&showResults && Number(investmentAmount) >= 50 && Number(investmentAmount)<threshold && (
+{investmentData?.inversiones && Array.isArray(investmentData.inversiones) &&  (
   <>
-    <InvestmentResults results={investmentData} />
+    <InvestmentResults results={investmentData.inversiones} />
     <div style={{ marginTop: '2rem' }}>
-      <Bar data={generateBarChartData()} options={{
+      <Bar data={generateBarChartData} options={{
         responsive: true,
         plugins: {
           title: {
@@ -300,7 +284,7 @@ const PantallaDeInversiones = () => {
             beginAtZero: false,
             ticks: {
               stepSize: 50,
-              max: Math.max(...investmentData.map(result => result.finalAmount))+50
+              max: Math.max(...investmentData.inversiones?.map(result => result.finalAmount))+50
             }
           }
         }
@@ -315,14 +299,14 @@ const PantallaDeInversiones = () => {
             <div style={{ marginTop: '2rem', padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '0.5rem' }}>
               <h3 style={{ color: '#dc2626' }}>💡 Recomendación de Inversión:</h3>
               <ul>
-                {investmentData.map((rec, index) => (
+                {investmentData.inversiones?.map((rec, index) => (
                   <li key={index}>
                     <strong>{rec.institution}:</strong> ${rec.recommendedAmount}
                   </li>
                 ))}
               </ul>
               <div style={{ marginTop: '2rem' }}>
-            <Pie data={generatePieChartData()} options={{
+            <Pie data={generatePieChartData} options={{
               plugins: {
                 title: { display: true, text: 'Distribución de Inversión', font: { size: 16 } }
               }
