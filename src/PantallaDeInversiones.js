@@ -7,6 +7,7 @@ import {
   Chart as ChartJS, Title, Tooltip, Legend, 
   BarElement, CategoryScale, LinearScale, ArcElement 
 } from 'chart.js';
+import InvestmentRecommendations from "./InvestmentRecomendations";
 
 ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, ArcElement);
 
@@ -22,6 +23,7 @@ const PantallaDeInversiones = () => {
   const [investmentData, setInvestmentData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [recommendations, setRecommendations] = useState(null);
 
   const threshold = 135000;
 
@@ -44,33 +46,42 @@ const PantallaDeInversiones = () => {
         fija_o_flexible: investmentType,
         modelo_de_inversion: selectedPeriod,
       });
-  
-      console.log("Datos recibidos:", response.data); // 🔍 Ver JSON en consola
 
-      setInvestmentData(response.data);
-    } catch (error) {
-      if (error.response) {
-        // El servidor respondió con un estado fuera del rango 2xx
-        console.error("Error en la API:", error.response.status, error.response.data);
-        setError(`Error ${error.response.status}: ${error.response.data}`);
-      } else if (error.request) {
-        // La solicitud fue hecha pero no hubo respuesta
-        console.error("No hay respuesta del servidor:", error.request);
-        setError("No hay respuesta del servidor. Verifica la API.");
-      } else {
-        // Error en la configuración de la solicitud
-        console.error("Error desconocido:", error.message);
-        setError("Error al procesar la solicitud.");
-      }
-    } finally {
+      console.log("📊 Datos recibidos:", response.data);
       setLoading(false);
+
+      if (Array.isArray(response.data)) {
+        // 🔥 Si la respuesta es un array, significa que es una recomendación de inversión
+        setInvestmentData(null);
+        setRecommendations(response.data);
+      } else {
+        // 🔥 Si la respuesta es un objeto con `inversiones`, es una inversión normal
+        setInvestmentData(response.data);
+        setRecommendations(null);
+      }
+    } catch (error) {
+      console.error("Error en la API:", error);
     }
   };
+
+  const recommendationsChartData = useMemo(() => ({
+    labels: recommendations?.map(inv => inv.nombre) || [],
+    datasets: [
+      {
+        label: 'Monto Asignado ($)',
+        data: recommendations?.map(inv => inv.montoAsignado) || [],
+        backgroundColor: ['rgba(24, 85, 152, 0.67)', 'rgba(255, 99, 132, 0.6)', 'rgba(54, 162, 235, 0.6)'],
+        borderColor: '#ffffff',
+        borderWidth: 2,
+      }
+    ]
+  }), [recommendations]);
+
   const generateBarChartData = useMemo(() => ({
     labels: investmentData?.inversiones?.map(inv => inv.nombre) || [],
     datasets: [
       {
-        label: 'Monto Asignado ($)',
+        label: 'Rendimiento total ($)',
         data: investmentData?.inversiones?.map(inv => inv.montoAsignado + inv.rendimiento) || [],
         backgroundColor: ['rgba(24, 85, 152, 0.67)', 'rgba(255, 99, 132, 0.6)', 'rgba(54, 162, 235, 0.6)'],
         borderColor: ['rgb(75, 91, 192)', 'rgb(255, 99, 132)', 'rgb(54, 162, 235)'],
@@ -264,67 +275,22 @@ const PantallaDeInversiones = () => {
         {error && <p style={{ color: "red" }}>❌ {error}</p>}
       </form>
 
-{investmentData?.inversiones && Array.isArray(investmentData.inversiones) &&  (
-  <>
-    <InvestmentResults results={investmentData.inversiones} />
-    <div style={{ marginTop: '2rem' }}>
-      <Bar data={generateBarChartData} options={{
-        responsive: true,
-        plugins: {
-          title: {
-            display: true,
-            text: 'Comparación de Ganancias de Inversión',
-            font: {
-              size: 16
-            }
-          }
-        },
-        scales: {
-          y: {
-            beginAtZero: false,
-            ticks: {
-              stepSize: 50,
-              max: Math.max(...investmentData.inversiones?.map(result => result.finalAmount))+50
-            }
-          }
-        }
-      }} />
-      
-    </div>
+ {/* Si el monto es menor a 130,000, mostramos los resultados normales */}
+  {investmentData?.inversiones && (
+    <>
+      <InvestmentResults results={investmentData.inversiones} />
+      <div style={{ marginTop: '2rem' }}>
+        <Bar data={generateBarChartData} />
 
-  </>
-)}
-{showRecomendations && Number(investmentAmount) > threshold && (
-    
-            <div style={{ marginTop: '2rem', padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '0.5rem' }}>
-              <h3 style={{ color: '#dc2626' }}>💡 Recomendación de Inversión:</h3>
-              <ul>
-                {investmentData.inversiones?.map((rec, index) => (
-                  <li key={index}>
-                    <strong>{rec.institution}:</strong> ${rec.recommendedAmount}
-                  </li>
-                ))}
-              </ul>
-              <div style={{ marginTop: '2rem' }}>
-            <Pie data={generatePieChartData} options={{
-              plugins: {
-                title: { display: true, text: 'Distribución de Inversión', font: { size: 16 } }
-              }
-            }} />
-          </div>
-
-          <div style={{ marginTop: '2rem' }}>
-            <Bar data={generateBarChartData()} options={{
-              responsive: true,
-              plugins: { title: { display: true, text: 'Comparación de Ganancias de Inversión', font: { size: 16 } } },
-              scales: { y: { beginAtZero: false } }
-            }} />
-          </div>
-            </div>
-            
-          )}
-
-          
+        {investmentAmount > 130000 &&
+          <Pie data={generatePieChartData} options={{
+                 plugins: {
+                   title: { display: true, text: 'Distribución de Inversión', font: { size: 16 } }
+                 }
+               }} />}
+      </div>
+    </>
+  )}
 
     </div>
   );
